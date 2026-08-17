@@ -66,6 +66,22 @@ export CC=x86_64-w64-mingw32-gcc
 GOOS=windows GOARCH=amd64 CGO_ENABLED=1 go build -o DiffExcel.exe
 ```
 
+### 作为 Git 差异工具使用
+
+程序支持通过两个位置参数预加载旧、新 Excel 文件：
+
+```bash
+DiffExcel.exe <旧文件.xlsx> <新文件.xlsx>
+```
+
+在 Git difftool 或图形化 Git 客户端中，将程序路径设为 `DiffExcel.exe`，参数设为：
+
+```text
+"$LOCAL" "$REMOTE"
+```
+
+程序会把 Git 传入的相对路径转换为绝对路径，并自动加载两个文件及其 Sheet。
+
 ## 📄 许可证
 
 本项目采用MIT许可证 - 详见 [LICENSE](LICENSE) 文件

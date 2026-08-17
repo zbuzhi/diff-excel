@@ -4,11 +4,14 @@ import (
 	"os"
 	"testing"
 
+	fyneTest "fyne.io/fyne/v2/test"
 	"fyne.io/fyne/v2/widget"
 )
 
 // 这里测试 CompareExcelFiles 函数，跳过UI，直接调用纯逻辑
 func TestCompareExcelFiles(t *testing.T) {
+	testApp := fyneTest.NewApp()
+	defer testApp.Quit()
 
 	a := ExcelCompareApp{}
 	a.srcFile = "testdata/AA.xlsx"
@@ -43,6 +46,8 @@ func TestCompareExcelFiles(t *testing.T) {
 
 // 测试保持原格式功能
 func TestCompareExcelFilesWithFormat(t *testing.T) {
+	testApp := fyneTest.NewApp()
+	defer testApp.Quit()
 
 	a := ExcelCompareApp{}
 	a.srcFile = "testdata/AA.xlsx"

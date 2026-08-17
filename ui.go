@@ -252,53 +252,10 @@ func (a *ExcelCompareApp) createFileUploadHandlers() {
 			if r == nil {
 				return
 			}
-			a.srcFile = r.URI().Path()
-			a.srcEntry.SetText(a.srcFile)
+			path := r.URI().Path()
 			r.Close()
-
-			sheets, err := utils.GetSheets(a.srcFile)
-			if err != nil {
+			if err := a.loadSourceFile(path); err != nil {
 				dialog.ShowError(err, a.myWindow)
-				return
-			}
-
-			// 更新单Sheet模式
-			a.srcSheetSelect.Options = sheets
-			if len(sheets) > 0 {
-				a.srcSheetSelect.SetSelected(sheets[0])
-				a.srcSheet = sheets[0]
-			} else {
-				a.srcSheetSelect.SetSelected("")
-				a.srcSheet = ""
-			}
-
-			// 更新新的Sheet对比组选择器
-			a.currentSrcSheetSelect.Options = sheets
-			if len(sheets) > 0 {
-				a.currentSrcSheetSelect.SetSelected(sheets[0]) // 默认选择第一个
-			} else {
-				a.currentSrcSheetSelect.SetSelected("")
-			}
-
-			// 清理之前的多文件对比组
-			a.sheetPairs = []SheetPair{}
-			if a.sheetPairsList != nil {
-				a.sheetPairsList.Refresh()
-			}
-
-			// 如果两个文件都已选择，自动添加默认对比组
-			a.tryAddDefaultPair()
-
-			// 更新多Sheet模式数据
-			a.srcSheets = sheets
-			a.selectedSrcSheets = make(map[string]bool)
-			for _, sheet := range sheets {
-				a.selectedSrcSheets[sheet] = false
-			}
-
-			// 刷新多Sheet列表
-			if a.srcSheetMultiSelect != nil {
-				a.srcSheetMultiSelect.Refresh()
 			}
 		}, a.myWindow)
 		fd.SetFilter(storage.NewExtensionFileFilter([]string{".xlsx"}))
@@ -314,58 +271,83 @@ func (a *ExcelCompareApp) createFileUploadHandlers() {
 			if r == nil {
 				return
 			}
-			a.cmpFile = r.URI().Path()
-			a.cmpEntry.SetText(a.cmpFile)
+			path := r.URI().Path()
 			r.Close()
-
-			sheets, err := utils.GetSheets(a.cmpFile)
-			if err != nil {
+			if err := a.loadCompareFile(path); err != nil {
 				dialog.ShowError(err, a.myWindow)
-				return
-			}
-
-			// 更新单Sheet模式
-			a.cmpSheetSelect.Options = sheets
-			if len(sheets) > 0 {
-				a.cmpSheetSelect.SetSelected(sheets[0])
-				a.cmpSheet = sheets[0]
-			} else {
-				a.cmpSheetSelect.SetSelected("")
-				a.cmpSheet = ""
-			}
-
-			// 更新新的Sheet对比组选择器
-			a.currentCmpSheetSelect.Options = sheets
-			if len(sheets) > 0 {
-				a.currentCmpSheetSelect.SetSelected(sheets[0]) // 默认选择第一个
-			} else {
-				a.currentCmpSheetSelect.SetSelected("")
-			}
-
-			// 清理之前的多文件对比组
-			a.sheetPairs = []SheetPair{}
-			if a.sheetPairsList != nil {
-				a.sheetPairsList.Refresh()
-			}
-
-			// 如果两个文件都已选择，自动添加默认对比组
-			a.tryAddDefaultPair()
-
-			// 更新多Sheet模式数据
-			a.cmpSheets = sheets
-			a.selectedCmpSheets = make(map[string]bool)
-			for _, sheet := range sheets {
-				a.selectedCmpSheets[sheet] = false
-			}
-
-			// 刷新多Sheet列表
-			if a.cmpSheetMultiSelect != nil {
-				a.cmpSheetMultiSelect.Refresh()
 			}
 		}, a.myWindow)
 		fd.SetFilter(storage.NewExtensionFileFilter([]string{".xlsx"}))
 		fd.Show()
 	}
+}
+
+func (a *ExcelCompareApp) loadSourceFile(path string) error {
+	sheets, err := utils.GetSheets(path)
+	if err != nil {
+		return err
+	}
+	a.srcFile = path
+	a.srcEntry.SetText(path)
+	a.srcSheets = sheets
+	a.selectedSrcSheets = make(map[string]bool, len(sheets))
+	for _, sheet := range sheets {
+		a.selectedSrcSheets[sheet] = false
+	}
+	a.srcSheetSelect.Options = sheets
+	a.currentSrcSheetSelect.Options = sheets
+	if len(sheets) > 0 {
+		a.srcSheetSelect.SetSelected(sheets[0])
+		a.srcSheet = sheets[0]
+		a.currentSrcSheetSelect.SetSelected(sheets[0])
+	} else {
+		a.srcSheetSelect.SetSelected("")
+		a.srcSheet = ""
+		a.currentSrcSheetSelect.SetSelected("")
+	}
+	a.resetSheetPairsAndTryDefault()
+	if a.srcSheetMultiSelect != nil {
+		a.srcSheetMultiSelect.Refresh()
+	}
+	return nil
+}
+
+func (a *ExcelCompareApp) loadCompareFile(path string) error {
+	sheets, err := utils.GetSheets(path)
+	if err != nil {
+		return err
+	}
+	a.cmpFile = path
+	a.cmpEntry.SetText(path)
+	a.cmpSheets = sheets
+	a.selectedCmpSheets = make(map[string]bool, len(sheets))
+	for _, sheet := range sheets {
+		a.selectedCmpSheets[sheet] = false
+	}
+	a.cmpSheetSelect.Options = sheets
+	a.currentCmpSheetSelect.Options = sheets
+	if len(sheets) > 0 {
+		a.cmpSheetSelect.SetSelected(sheets[0])
+		a.cmpSheet = sheets[0]
+		a.currentCmpSheetSelect.SetSelected(sheets[0])
+	} else {
+		a.cmpSheetSelect.SetSelected("")
+		a.cmpSheet = ""
+		a.currentCmpSheetSelect.SetSelected("")
+	}
+	a.resetSheetPairsAndTryDefault()
+	if a.cmpSheetMultiSelect != nil {
+		a.cmpSheetMultiSelect.Refresh()
+	}
+	return nil
+}
+
+func (a *ExcelCompareApp) resetSheetPairsAndTryDefault() {
+	a.sheetPairs = []SheetPair{}
+	if a.sheetPairsList != nil {
+		a.sheetPairsList.Refresh()
+	}
+	a.tryAddDefaultPair()
 }
 
 // 初始化UI组件
