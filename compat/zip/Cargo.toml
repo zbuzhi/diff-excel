@@ -1,0 +1,14 @@
+[package]
+name = "zip"
+version = "8.6.1"
+edition = "2021"
+license = "MIT"
+description = "Internal umya compatibility adapter forwarding to zip 9"
+publish = false
+
+[features]
+default = []
+deflate = ["zip_next/deflate"]
+
+[dependencies]
+zip_next = { package = "zip", version = "9.0.4", default-features = false }

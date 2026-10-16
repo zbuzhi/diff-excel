@@ -1,0 +1,115 @@
+name: Rust checks and desktop packages
+
+on:
+  push:
+    branches: [main]
+    tags: ['v*']
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest, macos-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt, clippy
+      - uses: Swatinem/rust-cache@v2
+      - name: Install Linux native dependencies
+        if: runner.os == 'Linux'
+        run: sudo apt-get update && sudo apt-get install -y libgtk-3-dev libxkbcommon-dev libwayland-dev libx11-dev libxrandr-dev libxi-dev libxcursor-dev libgl1-mesa-dev
+      - run: cargo fmt --all -- --check
+      - run: cargo test --locked --no-default-features
+      - run: cargo clippy --locked --all-targets -- -D warnings
+      - name: Headless sample comparison
+        run: cargo run --locked --no-default-features -- --headless testdata/AA.xlsx testdata/BB.xlsx --output target/sample-report
+
+  package:
+    needs: test
+    if: startsWith(github.ref, 'refs/tags/v') || github.event_name == 'workflow_dispatch'
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: windows-latest
+            target: x86_64-pc-windows-msvc
+            name: windows-x64
+          - os: macos-latest
+            target: aarch64-apple-darwin
+            name: macos-apple-silicon
+          - os: macos-latest
+            target: x86_64-apple-darwin
+            name: macos-intel
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.target }}
+      - uses: Swatinem/rust-cache@v2
+      - name: Package macOS
+        if: runner.os == 'macOS'
+        run: sh scripts/package-macos.sh ${{ matrix.target }}
+      - name: Build Windows desktop and console versions
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          cargo build --release --locked --target ${{ matrix.target }}
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          New-Item -ItemType Directory -Force dist
+          Copy-Item target/${{ matrix.target }}/release/diff-excel.exe dist/DiffExcel.exe
+          cargo build --release --locked --no-default-features --target ${{ matrix.target }}
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          Copy-Item target/${{ matrix.target }}/release/diff-excel.exe dist/diff-excel-cli.exe
+          Copy-Item README.md dist/README.md
+          Copy-Item LICENSE dist/LICENSE
+          Compress-Archive -Path dist/*.exe,dist/README.md,dist/LICENSE -DestinationPath dist/DiffExcel-windows-x64.zip
+      - uses: actions/upload-artifact@v4
+        with:
+          name: DiffExcel-${{ matrix.name }}
+          path: |
+            dist/*.dmg
+            dist/*.zip
+          if-no-files-found: error
+
+  release:
+    needs: package
+    if: startsWith(github.ref, 'refs/tags/v')
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: DiffExcel-*
+          merge-multiple: true
+          path: release-assets
+      - name: Verify packages and write checksums
+        shell: bash
+        run: |
+          set -euo pipefail
+          cd release-assets
+          test -s DiffExcel-macos-apple-silicon.dmg
+          test -s DiffExcel-macos-intel.dmg
+          test -s DiffExcel-windows-x64.zip
+          sha256sum *.dmg *.zip > SHA256SUMS.txt
+      - name: Publish release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          notes="docs/releases/${GITHUB_REF_NAME}.md"
+          test -s "$notes"
+          gh release create "$GITHUB_REF_NAME" release-assets/* \
+            --repo "$GITHUB_REPOSITORY" --verify-tag --latest \
+            --title "Diff Excel ${GITHUB_REF_NAME}" --notes-file "$notes"

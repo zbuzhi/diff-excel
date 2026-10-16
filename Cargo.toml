@@ -1,0 +1,34 @@
+[package]
+name = "diff-excel"
+version = "2.0.0"
+edition = "2021"
+rust-version = "1.89"
+description = "A local-first Excel comparison workbench"
+license = "MIT"
+repository = "https://github.com/zbuzhi/diff-excel"
+default-run = "diff-excel"
+
+[features]
+default = ["desktop"]
+desktop = ["dep:eframe", "dep:rfd", "dep:fontdb", "dep:open"]
+
+[dependencies]
+anyhow = "1"
+clap = { version = "4.5", features = ["derive"] }
+umya-spreadsheet = "=3.1.1"
+tempfile = "3"
+quick-xml = "0.41"
+zip_data = { package = "zip", version = "9.0.4", default-features = false, features = ["deflate"] }
+eframe = { version = "0.31.1", default-features = false, features = ["accesskit", "default_fonts", "wgpu", "x11", "wayland"], optional = true }
+rfd = { version = "0.15", optional = true }
+fontdb = { version = "0.23", optional = true }
+open = { version = "5", optional = true }
+
+# umya 3.1.1 requests the withdrawn zip 8.6 line. This small adapter
+# forwards the APIs it uses to the supported zip 9 implementation.
+[patch.crates-io]
+zip = { path = "compat/zip" }
+
+[profile.release]
+lto = "thin"
+strip = true

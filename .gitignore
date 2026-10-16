@@ -1,2 +1,9 @@
 diffExcel
 diffExcel.exe
+/target/
+/dist/
+*.dmg
+*.zip
+.DS_Store
+__pycache__/
+*.py[cod]
