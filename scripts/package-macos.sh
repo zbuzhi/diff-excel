@@ -10,12 +10,14 @@ esac
 
 root=$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)
 cd "$root"
+version=$(awk -F '"' '/^version = / {print $2; exit}' Cargo.toml)
+test -n "$version"
 cargo build --release --locked --target "$target"
 bundle="dist/macos-$arch/Diff Excel.app"
 mkdir -p "$bundle/Contents/MacOS" "$bundle/Contents/Resources"
 cp "target/$target/release/diff-excel" "$bundle/Contents/MacOS/diff-excel"
 cp assets/DiffExcel.icns "$bundle/Contents/Resources/DiffExcel.icns"
-cat > "$bundle/Contents/Info.plist" <<'PLIST'
+cat > "$bundle/Contents/Info.plist" <<PLIST
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0"><dict>
@@ -25,8 +27,8 @@ cat > "$bundle/Contents/Info.plist" <<'PLIST'
 <key>CFBundleExecutable</key><string>diff-excel</string>
 <key>CFBundleIconFile</key><string>DiffExcel</string>
 <key>CFBundlePackageType</key><string>APPL</string>
-<key>CFBundleShortVersionString</key><string>2.0.0</string>
-<key>CFBundleVersion</key><string>2</string>
+<key>CFBundleShortVersionString</key><string>${version}</string>
+<key>CFBundleVersion</key><string>${version}</string>
 <key>LSMinimumSystemVersion</key><string>11.0</string>
 <key>NSHighResolutionCapable</key><true/>
 </dict></plist>

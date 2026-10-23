@@ -12,9 +12,9 @@
 
 做表的人多了，文件名也慢慢变成了“最终版”“最终修改版”“这次真的是最终版”。想知道两个文件到底差在哪儿，靠来回切换窗口并不轻松。
 
-Diff Excel 就是为这件事做的小工具。选好旧、新两个 `.xlsx` 文件，它会找出单元格内容和公式的变化，列出新增、删除和修改，并生成一份带高亮的 Excel 报告。文件在电脑上处理，不需要上传，也不用注册账号。
+Diff Excel 就是为这件事做的小工具。选好旧、新两个 `.xlsx` 文件，它会找出单元格内容和公式的变化，列出新增、删除和修改，需要时再导出一份带高亮的 Excel 报告。文件在电脑上处理，不需要上传，也不用注册账号。
 
-2.0 使用 Rust 重新开发，界面也重新做了一遍。现在可以直接查看、搜索差异，确认后再打开导出的 Excel。
+2.1 可以先看结果，再决定要不要导出。搜索覆盖全部差异，长内容放在右侧详情里连续查看，文件选反了也能直接交换。
 
 ## 下载
 
@@ -32,39 +32,49 @@ Diff Excel 就是为这件事做的小工具。选好旧、新两个 `.xlsx` 文
 
 ## 怎么用
 
-1. 选择旧版本和新版本的 Excel，也可以把两个文件一起拖进窗口。
-2. 检查工作表配对。同名工作表会自动匹配；名称不同的，可以手动配对。只在一侧出现的工作表会作为新增或删除处理。
-3. 按需设置格式保留、旧内容批注和高亮颜色，点击底部圆形的“开始对比”。
-4. 完成后自动进入结果页。可以按新增、删除、修改筛选，也可以搜索工作表、单元格或内容。点击一行查看完整内容。
+1. 选择旧版本和新版本的 Excel，也可以把文件拖到对应卡片。选反了，点“交换旧／新版本”即可。
+2. 同名工作表会自动配对；有需要再展开配对设置，手动调整名称不同的工作表。
+3. 点击底部圆形的“开始对比”。完成后直接进入结果页，不用等 Excel 报告导出。
+4. 按新增、删除、修改或工作表筛选，也可以搜索全部差异。点击一行，在右侧查看完整旧、新内容，通过“上一条／下一条”连续浏览。
+5. 需要留档时，点击“导出 Excel 和日志”。高亮颜色、格式保留和旧内容批注都可以调整，修改这些选项不需要重新比较。
 
-结果页可以返回文件设置；返回后，点“查看上次结果”就能继续看刚才的报告，不用再算一遍。
+返回文件设置后，点“查看上次结果”可以接着看，搜索、筛选和位置都会保留。如果更换文件或调整配对，界面会提醒重新对比，避免把旧结果当成新结果。
+
+输出目录、颜色和常用选项会记在本机，下次打开不用重新设置。最近文件也可以一键清空记录，不会删除原文件。
+
+| 快捷键 | 操作 |
+| --- | --- |
+| `Cmd/Ctrl + Enter` | 开始对比 |
+| `Cmd/Ctrl + F` | 搜索全部差异 |
+| `↑` / `↓` | 浏览差异 |
+| `Esc` | 关闭详情或选色窗口 |
 
 ### 操作演示
 
-从开始对比，到按类型筛选差异、返回设置和自定义颜色，一段动图看完。
+从开始对比、翻页和全量搜索，到查看变化详情、按需导出，一段动图看完。
 
-<img src="https://raw.githubusercontent.com/zbuzhi/diff-excel/main/docs/screenshots/demo.gif" width="760" alt="Diff Excel 实际操作演示：对比、筛选、返回与自定义颜色">
+<img src="https://raw.githubusercontent.com/zbuzhi/diff-excel/v2.1.0/docs/screenshots/demo.gif" width="760" alt="Diff Excel 2.1 实际操作演示：全量搜索、侧边详情与按需导出">
 
 <details>
 <summary>展开查看界面截图</summary>
 
 选择文件、检查工作表配对，并设置导出选项：
 
-<img src="https://raw.githubusercontent.com/zbuzhi/diff-excel/main/docs/screenshots/setup.png" width="760" alt="选择文件、工作表配对与导出设置">
+<img src="https://raw.githubusercontent.com/zbuzhi/diff-excel/v2.1.0/docs/screenshots/setup.png" width="760" alt="选择文件、工作表配对与导出设置">
 
-新增、删除、修改分开标记，旧内容和新内容并排显示：
+完整差异可以搜索和分页，右侧详情突出显示发生变化的文字：
 
-<img src="https://raw.githubusercontent.com/zbuzhi/diff-excel/main/docs/screenshots/results.png" width="760" alt="差异列表与筛选搜索">
+<img src="https://raw.githubusercontent.com/zbuzhi/diff-excel/v2.1.0/docs/screenshots/results.png" width="760" alt="差异列表与筛选搜索">
 
 高亮颜色可以自己选，也可以直接输入 HEX 色值：
 
-<img src="https://raw.githubusercontent.com/zbuzhi/diff-excel/main/docs/screenshots/color-picker.png" width="760" alt="自定义高亮颜色选择器">
+<img src="https://raw.githubusercontent.com/zbuzhi/diff-excel/v2.1.0/docs/screenshots/color-picker.png" width="760" alt="自定义高亮颜色选择器">
 
 </details>
 
 ## 导出的文件在哪里
 
-默认保存在系统文档目录下的 `Diff Excel` 文件夹，也可以在界面里更改。每次对比都会新建一个独立目录，里面有：
+点击导出后，默认保存在系统文档目录下的 `Diff Excel` 文件夹，也可以在界面里更改，软件会记住选择。每次导出都会新建一个独立目录，里面有：
 
 - **`diff.xlsx`**：以新版本为基础的差异报告，变化的单元格会高亮；开启批注后，还能看到旧内容。
 - **`changes.txt`**：完整差异日志，记录工作表、单元格位置及前后的内容。
@@ -77,7 +87,8 @@ Diff Excel 就是为这件事做的小工具。选好旧、新两个 `.xlsx` 文
 - 按单元格坐标比较，不会自动识别“整行移动”或“中间插了一行”。这类操作可能产生较多差异。
 - 比较单元格的值、数据类型和公式，不把单纯的颜色、字体等样式调整算作内容变化。
 - 不重新计算公式。公式文本或文件内保存的计算结果变化，都会计入差异。
-- 界面最多预览、搜索前 **5,000 条**差异；导出的 Excel 和日志包含全部变化。
+- 搜索和筛选覆盖全部差异，列表按每页 **200 条**加载。结果会暂存在本机，只有点击导出才会生成 Excel 和完整日志。
+- 处理时可以请求取消；读取文件或保存 Excel 时，需要等当前阶段结束后清理，不会强行中断文件写入。
 - 保留格式时，以新工作簿为基础保留其他工作表和跨表引用；删除的工作表会另建报告页。复杂图表、透视表、外部链接等仍建议用自己的文件确认效果。
 
 
@@ -146,6 +157,7 @@ sudo apt-get install libgtk-3-dev libxkbcommon-dev libwayland-dev \
 
 ```sh
 cargo fmt --all -- --check
+cargo test --locked --all-targets
 cargo test --locked --no-default-features
 cargo clippy --locked --all-targets -- -D warnings
 ```

@@ -48,7 +48,7 @@ fn run() -> Result<()> {
                 output: args.output.unwrap_or_else(default_output),
                 keep_format: !args.no_format,
                 comments: !args.no_comments,
-                color: args.color,
+                color: args.color.unwrap_or_else(|| "#FFF0BD".into()),
             },
             |text| eprintln!("{text}"),
         )?;

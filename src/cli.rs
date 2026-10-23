@@ -28,9 +28,9 @@ pub struct Args {
     /// 不在差异单元格中添加旧内容批注
     #[arg(long)]
     pub no_comments: bool,
-    /// 高亮颜色，#RRGGBB
-    #[arg(long, default_value = "#FFF0BD")]
-    pub color: String,
+    /// 高亮颜色，#RRGGBB（命令行默认暖黄，桌面默认使用上次设置）
+    #[arg(long)]
+    pub color: Option<String>,
 }
 
 pub fn default_output() -> PathBuf {

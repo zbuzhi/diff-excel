@@ -1,6 +1,8 @@
+use crate::analysis::{analyze, Analysis, Cancellation};
 use crate::workbook::{safe_sheet_name, SheetPair, Workbook};
 use anyhow::{bail, Context, Result};
-use std::collections::{BTreeSet, HashMap, HashSet};
+use serde::{Deserialize, Serialize};
+use std::collections::{HashMap, HashSet};
 use std::io::{BufWriter, Write};
 use std::path::PathBuf;
 use std::time::{Duration, Instant};
@@ -16,7 +18,7 @@ pub struct Options {
     pub color: String,
 }
 
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub enum Kind {
     Added,
     Removed,
@@ -37,13 +39,16 @@ impl Kind {
     }
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct Difference {
     pub sheet: String,
     pub cell: String,
     pub old: String,
     pub new: String,
     pub kind: Kind,
+    pub reason: String,
+    pub old_type: String,
+    pub new_type: String,
 }
 
 #[derive(Debug)]
@@ -67,7 +72,7 @@ pub fn parse_color(color: &str) -> Result<String> {
     Ok(format!("FF{}", color.to_ascii_uppercase()))
 }
 
-fn content(cell: Option<&Cell>) -> (String, String, String) {
+pub(crate) fn content(cell: Option<&Cell>) -> (String, String, String) {
     match cell {
         Some(c) if !c.value().is_empty() || !c.formula().is_empty() => (
             c.data_type().to_owned(),
@@ -78,7 +83,7 @@ fn content(cell: Option<&Cell>) -> (String, String, String) {
     }
 }
 
-fn display(cell: Option<&Cell>) -> String {
+pub(crate) fn display(cell: Option<&Cell>) -> String {
     cell.map(|c| {
         if c.formula().is_empty() {
             c.value().into_owned()
@@ -89,7 +94,10 @@ fn display(cell: Option<&Cell>) -> String {
     .unwrap_or_default()
 }
 
-fn sheet<'a>(book: &'a Workbook, name: &Option<String>) -> Result<Option<&'a Worksheet>> {
+pub(crate) fn sheet<'a>(
+    book: &'a Workbook,
+    name: &Option<String>,
+) -> Result<Option<&'a Worksheet>> {
     name.as_deref()
         .map(|n| {
             book.book
@@ -107,23 +115,27 @@ pub fn compare(
     mut progress: impl FnMut(String),
 ) -> Result<Report> {
     let started = Instant::now();
+    parse_color(&options.color)?;
+    let cancel = Cancellation::default();
+    let analysis = analyze(old, new, pairs, &cancel, &mut progress)?;
+    let mut report = export(old, new, &analysis, options, &cancel, progress)?;
+    report.elapsed = started.elapsed();
+    Ok(report)
+}
+
+/// Export an existing result, without comparing input cells again.
+pub fn export(
+    old: &Workbook,
+    new: &Workbook,
+    analysis: &Analysis,
+    options: &Options,
+    cancel: &Cancellation,
+    mut progress: impl FnMut(String),
+) -> Result<Report> {
+    let started = Instant::now();
+    cancel.check()?;
     let color = parse_color(&options.color)?;
-    if pairs.is_empty() {
-        bail!("请至少添加一组工作表");
-    }
-    let mut destinations = HashSet::new();
-    for pair in pairs {
-        if pair.old.is_none() && pair.new.is_none() {
-            bail!("对比组的两侧不能同时为空");
-        }
-        sheet(old, &pair.old)?;
-        sheet(new, &pair.new)?;
-        if let Some(name) = &pair.new {
-            if !destinations.insert(name.clone()) {
-                bail!("新工作表 {name} 被重复配对，请为每张新工作表保留一组对比");
-            }
-        }
-    }
+    let pairs = &analysis.pairs;
     std::fs::create_dir_all(&options.output).context("无法创建输出目录，请选择可写目录")?;
     // Work in a private staging directory; publish only after both outputs succeed.
     let staging = tempfile::Builder::new()
@@ -178,15 +190,17 @@ pub fn compare(
         elapsed: Duration::ZERO,
     };
 
+    let mut changes = analysis.rows()?;
+    let mut next = changes.next().transpose()?;
     for (index, pair) in pairs.iter().enumerate() {
+        cancel.check()?;
         progress(format!(
-            "正在对比 {}/{} · {}",
+            "正在准备导出 {}/{} · {}",
             index + 1,
             pairs.len(),
             pair.label()
         ));
         let old_sheet = sheet(old, &pair.old)?;
-        let new_sheet = sheet(new, &pair.new)?;
         let output_name = if pair.new.is_some() {
             pair.new.clone().unwrap()
         } else {
@@ -218,31 +232,6 @@ pub fn compare(
             name
         };
         writeln!(writer, "\n=== {} | 输出：{} ===", pair.label(), output_name)?;
-        if pair.old.is_none() || pair.new.is_none() {
-            record(
-                &mut report,
-                &mut writer,
-                Difference {
-                    sheet: pair.label(),
-                    cell: "—".into(),
-                    old: pair.old.clone().unwrap_or_default(),
-                    new: pair.new.clone().unwrap_or_default(),
-                    kind: if pair.old.is_none() {
-                        Kind::SheetAdded
-                    } else {
-                        Kind::SheetRemoved
-                    },
-                },
-            )?;
-        }
-        // Visit only stored cells, including cells that exist on just one side.
-        let mut coordinates = BTreeSet::new();
-        for s in [old_sheet, new_sheet].into_iter().flatten() {
-            for c in s.cells() {
-                let coordinate = c.coordinate();
-                coordinates.insert((coordinate.row_num(), coordinate.col_num()));
-            }
-        }
         let target = output.sheet_by_name_mut(&output_name).unwrap();
         let mut comment_indices: HashMap<String, usize> = target
             .comments()
@@ -250,33 +239,28 @@ pub fn compare(
             .enumerate()
             .map(|(i, c)| (c.coordinate().get_coordinate(), i))
             .collect();
-        for (row, col) in coordinates {
-            let before = old_sheet.and_then(|s| s.cell((col, row)));
-            let after = new_sheet.and_then(|s| s.cell((col, row)));
-            let old_content = content(before);
-            let new_content = content(after);
-            if old_content == new_content {
+        while next.as_ref().is_some_and(|r| r.pair == index) {
+            cancel.check()?;
+            let diff = next.take().unwrap().difference;
+            next = changes.next().transpose()?;
+            if matches!(diff.kind, Kind::SheetAdded | Kind::SheetRemoved) {
+                record(&mut report, &mut writer, diff)?;
                 continue;
             }
-            let kind = if old_content == Default::default() {
-                Kind::Added
-            } else if new_content == Default::default() {
-                Kind::Removed
-            } else {
-                Kind::Modified
-            };
-            let cell = umya_spreadsheet::helper::coordinate::coordinate_from_index(col, row);
-            let old_text = display(before);
-            let new_text = display(after);
+            let cell = diff.cell.clone();
+            let before = old_sheet.and_then(|s| s.cell(cell.as_str()));
+            let old_text = &diff.old;
+            let new_text = &diff.new;
+            let kind = &diff.kind;
             // The destination already contains new values/formulas. Deleted cells are
             // blank and highlighted; their old contents remain available in notes/log.
-            if after.is_none() || new_content == Default::default() {
+            if diff.kind == Kind::Removed {
                 target
-                    .cell_mut((col, row))
+                    .cell_mut(cell.as_str())
                     .set_cell_value(Default::default());
             }
             target
-                .style_mut((col, row))
+                .style_mut(cell.as_str())
                 .set_background_color_solid(&color);
             if options.comments && before.is_some() {
                 let existing = comment_indices.get(&cell).copied();
@@ -299,26 +283,17 @@ pub fn compare(
                 } else {
                     let mut comment = Comment::default();
                     comment
-                        .new_comment((col, row))
+                        .new_comment(cell.as_str())
                         .set_author("Diff Excel")
                         .set_text_string(note);
                     comment_indices.insert(cell.clone(), target.comments().len());
                     target.comments_mut().push(comment);
                 }
             }
-            record(
-                &mut report,
-                &mut writer,
-                Difference {
-                    sheet: pair.label(),
-                    cell,
-                    old: old_text,
-                    new: new_text,
-                    kind,
-                },
-            )?;
+            record(&mut report, &mut writer, diff)?;
         }
     }
+    cancel.check()?;
     // Excel requires at least one visible worksheet.
     let visible = output
         .sheet_collection()
@@ -338,8 +313,10 @@ pub fn compare(
         "\n总差异：{}，新增：{}，删除：{}，修改：{}",
         report.total, report.added, report.removed, report.modified
     )?;
+    cancel.check()?;
     writer.flush()?;
     drop(writer);
+    cancel.check()?;
     // Reserve a unique final name. Rename within the same filesystem is atomic.
     let final_dir = tempfile::Builder::new()
         .prefix("comparison-")

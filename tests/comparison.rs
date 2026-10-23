@@ -185,6 +185,9 @@ fn cli_parses_spaces_unicode_and_missing_file_pairs() {
     let args =
         Args::try_parse_from(["diff-excel", "--headless", "旧 文件.xlsx", "新 文件.xlsx"]).unwrap();
     assert_eq!(args.old.unwrap(), Path::new("旧 文件.xlsx"));
+    assert!(args.color.is_none());
+    let explicit = Args::try_parse_from(["diff-excel", "--color", "#FFF0BD"]).unwrap();
+    assert_eq!(explicit.color.as_deref(), Some("#FFF0BD"));
     assert!(Args::try_parse_from(["diff-excel", "--headless", "one.xlsx"]).is_err());
 }
 
